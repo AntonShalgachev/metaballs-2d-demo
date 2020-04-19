@@ -1,0 +1,14 @@
+{
+    "name": "Gamelogic.Extensions.Examples",
+    "references": [
+        "Gamelogic.Extensions"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": []
+}
