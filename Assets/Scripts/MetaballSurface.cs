@@ -7,7 +7,7 @@ namespace UnityPrototype
 {
     public class MetaballSurface : MonoBehaviour
     {
-        private class GridPoint
+        public class GridPoint
         {
             private MetaballSurface m_surface = null;
 
@@ -29,7 +29,7 @@ namespace UnityPrototype
             }
         }
 
-        private class GridCell
+        public class GridCell
         {
             private MetaballSurface m_surface = null;
 
@@ -55,16 +55,26 @@ namespace UnityPrototype
                 return configuration;
             }
 
-            public Vector2 GetEdgePoint(int pointId)
+            public Vector2 GetEdgePoint(int edgePointId)
             {
-                var sourceVertex = vertices[pointId];
-                var destinationVertex = vertices[(pointId + 1) % vertices.Count];
+                var sourceVertex = vertices[edgePointId];
+                var destinationVertex = vertices[(edgePointId + 1) % vertices.Count];
 
                 var relativePosition = 0.5f;
                 if (m_surface.m_interpolateEdgePoints)
                     relativePosition = Mathf.InverseLerp(sourceVertex.value, destinationVertex.value, m_surface.m_isoThreshold);
 
                 return Vector2.Lerp(sourceVertex.position, destinationVertex.position, relativePosition);
+            }
+
+            public Vector2 GetCellPoint(int pointId)
+            {
+                var index = pointId / 2;
+
+                if (pointId % 2 == 1)
+                    return GetEdgePoint(index);
+
+                return vertices[index].position;
             }
         }
 
@@ -79,34 +89,6 @@ namespace UnityPrototype
 
         [ShowNativeProperty] private Vector2 m_gridRange => m_gridTransform != null ? (Vector2)m_gridTransform.localScale : Vector2.one;
         [ShowNativeProperty] private Vector2 m_gridCenter => m_gridTransform != null ? (Vector2)m_gridTransform.position : Vector2.one;
-
-        private static int[][] sm_cellEdgePoints = new int[][] {
-            new int[] { 0, 1 },
-            new int[] { 0, 2 },
-            new int[] { 0, 3 },
-            new int[] { 1, 2 },
-            new int[] { 1, 3 },
-            new int[] { 2, 3 },
-        };
-
-        private static int[][] sm_cellEdges = new int[][] {
-            new int[] {},
-            new int[] {2},
-            new int[] {0},
-            new int[] {4},
-            new int[] {3},
-            new int[] {0, 5},
-            new int[] {1},
-            new int[] {5},
-            new int[] {5},
-            new int[] {1},
-            new int[] {2, 3},
-            new int[] {3},
-            new int[] {4},
-            new int[] {0},
-            new int[] {2},
-            new int[] {},
-        };
 
         private List<IMetaballShape> m_runtimeParticles = new List<IMetaballShape>();
         private List<IMetaballShape> m_particles
@@ -143,11 +125,6 @@ namespace UnityPrototype
         private void Awake()
         {
             RecreateGrid();
-        }
-
-        private void Update()
-        {
-            UpdateField();
         }
 
         private GridPoint CreateGridPoint(Vector2Int location)
@@ -187,14 +164,14 @@ namespace UnityPrototype
             return m_gridCells[location.x, location.y];
         }
 
-        private IEnumerable<GridPoint> EnumerateGridPoints()
+        public IEnumerable<GridPoint> EnumerateGridPoints()
         {
             for (var i = 0; i <= m_gridResolution.x; i++)
                 for (var j = 0; j <= m_gridResolution.y; j++)
                     yield return m_gridPoints[i, j];
         }
 
-        private IEnumerable<GridCell> EnumerateGridCells()
+        public IEnumerable<GridCell> EnumerateGridCells()
         {
             for (var i = 0; i < m_gridResolution.x; i++)
                 for (var j = 0; j < m_gridResolution.y; j++)
@@ -214,7 +191,7 @@ namespace UnityPrototype
                     m_gridCells[i, j] = CreateGridCell(new Vector2Int(i, j));
         }
 
-        private void UpdateField()
+        public void UpdateField()
         {
             foreach (var point in EnumerateGridPoints())
             {
@@ -223,20 +200,24 @@ namespace UnityPrototype
                     point.value += particle.CalculatePotential(point.position);
             }
 
-            foreach (var cell in EnumerateGridCells())
-            {
-                var configuration = cell.CalculateConfiguration();
+            // foreach (var cell in EnumerateGridCells())
+            // {
+            //     var configuration = cell.CalculateConfiguration();
 
-                foreach (var edge in sm_cellEdges[configuration])
-                {
-                    var edgePoints = sm_cellEdgePoints[edge];
+            //     var indices = sm_cellTriangleIndices[configuration];
 
-                    var from = cell.GetEdgePoint(edgePoints[0]);
-                    var to = cell.GetEdgePoint(edgePoints[1]);
 
-                    Debug.DrawLine(transform.TransformPoint(from), transform.TransformPoint(to), Color.red);
-                }
-            }
+
+            //     // foreach (var edge in sm_cellEdges[configuration])
+            //     // {
+            //     //     var edgePoints = sm_cellEdgePoints[edge];
+
+            //     //     var from = cell.GetCellPoint(edgePoints[0]);
+            //     //     var to = cell.GetCellPoint(edgePoints[1]);
+
+            //     //     Debug.DrawLine(transform.TransformPoint(from), transform.TransformPoint(to), Color.red);
+            //     // }
+            // }
         }
 
         private void OnDrawGizmos()
