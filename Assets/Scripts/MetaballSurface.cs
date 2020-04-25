@@ -27,14 +27,27 @@ namespace UnityPrototype
             private MetaballSurface m_surface;
 
             public Vector2 position;
-            public float value;
-            public bool active => value >= m_surface.m_isoThreshold;
+
+            private float m_value;
+            public float value
+            {
+                get => m_value;
+                set
+                {
+                    m_value = value;
+                    m_active = m_value >= m_surface.m_isoThreshold;
+                }
+            }
+
+            private bool m_active;
+            public bool active => m_active;
 
             public GridValuePoint(MetaballSurface surface, Vector2 position)
             {
                 m_surface = surface;
                 this.position = position;
-                this.value = 0.0f;
+                m_value = 0.0f;
+                m_active = false;
             }
 
             override public string ToString()
@@ -47,17 +60,19 @@ namespace UnityPrototype
         {
             private MetaballSurface m_surface;
 
-            public int startValuePointIndex { get; private set; }
-            public int endValuePointIndex { get; private set; }
+            public readonly int startValuePointIndex;
+            public readonly int endValuePointIndex;
+            public readonly bool valid;
             public float relativePosition;
-            public bool valid => startValuePointIndex >= 0 && endValuePointIndex >= 0;
             public Vector2 position => CalculatePosition();
 
             public GridControlPoint(MetaballSurface surface, int startValuePointIndex, int endValuePointIndex)
             {
                 m_surface = surface;
+
                 this.startValuePointIndex = startValuePointIndex;
                 this.endValuePointIndex = endValuePointIndex;
+                this.valid = startValuePointIndex >= 0 && endValuePointIndex >= 0;
 
                 relativePosition = 0.5f;
             }
@@ -67,7 +82,7 @@ namespace UnityPrototype
                 var startPosition = m_surface.GetValuePointPosition(startValuePointIndex);
                 var endPosition = m_surface.GetValuePointPosition(endValuePointIndex);
 
-                return Vector2.Lerp(startPosition, endPosition, relativePosition);
+                return Vector2.LerpUnclamped(startPosition, endPosition, relativePosition);
             }
         }
 
@@ -157,12 +172,26 @@ namespace UnityPrototype
         }
         private float m_particlesCount => m_particles.Count;
 
-        private Vector2Int m_extendedGridResolution => m_gridResolution + Vector2Int.one;
-        public int cellsCount => m_gridResolution.x * m_gridResolution.y;
+        private Vector2Int m_extendedGridResolution;
+        public int cellsCount;
 
         private GridValuePoint[] m_gridValuePoints = null;
         private GridControlPoint[] m_gridControlPoints = null;
         private GridCell[] m_gridCells = null;
+
+        private static readonly Vector2Int[] sm_worldValuePointIndexOffsets = new Vector2Int[] {
+                Vector2Int.zero,
+                Vector2Int.right,
+                Vector2Int.one,
+                Vector2Int.up,
+            };
+
+        private static readonly Vector3Int[] sm_worldControlPointIndexOffsets = new Vector3Int[] {
+                new Vector3Int(0, 0, 1),
+                new Vector3Int(1, 0, 0),
+                new Vector3Int(0, 1, 1),
+                new Vector3Int(0, 0, 0),
+            };
 
         private List<IMetaballShape> FindParticles()
         {
@@ -182,6 +211,8 @@ namespace UnityPrototype
 
         private void Awake()
         {
+            m_extendedGridResolution = m_gridResolution + Vector2Int.one;
+            cellsCount = m_gridResolution.x * m_gridResolution.y;
             RecreateGrid();
         }
 
@@ -222,47 +253,10 @@ namespace UnityPrototype
             return new GridControlPoint(this, startIndex, endIndex);
         }
 
-        // private GridPoint GetGridPoint(Vector2Int location)
-        // {
-        //     return m_gridValuePoints[CalculateGridLinearIndex(location.x, location.y, m_gridResolution + Vector2Int.one)];
-        // }
-
-        // private GridCell CreateGridCell(int cellIndex)
-        // {
-        //     // // TODO create only once
-        //     // var pointOffsets = new List<Vector2Int>
-        //     // {
-        //     //     Vector2Int.zero,
-        //     //     Vector2Int.right,
-        //     //     Vector2Int.one,
-        //     //     Vector2Int.up,
-        //     // };
-
-        //     // var cellVertices = new List<GridPoint>();
-        //     // foreach (var offset in pointOffsets)
-        //     //     cellVertices.Add(GetGridPoint(location + offset));
-
-        //     return new GridCell(this, cellIndex);
-        // }
-
         private GridCell GetGridCell(Vector2Int location)
         {
             return m_gridCells[CalculateGridLinearIndex(location.x, location.y, m_gridResolution)];
         }
-
-        // public IEnumerable<GridPoint> EnumerateGridPoints()
-        // {
-        //     for (var i = 0; i <= m_gridResolution.x; i++)
-        //         for (var j = 0; j <= m_gridResolution.y; j++)
-        //             yield return GetGridPoint(new Vector2Int(i, j)); // TODO inefficient
-        // }
-
-        // public IEnumerable<GridCell> EnumerateGridCells()
-        // {
-        //     for (var i = 0; i < m_gridResolution.x; i++)
-        //         for (var j = 0; j < m_gridResolution.y; j++)
-        //             yield return GetGridCell(new Vector2Int(i, j)); // TODO inefficient
-        // }
 
         private void RecreateGrid()
         {
@@ -295,6 +289,9 @@ namespace UnityPrototype
 
         public void UpdateField()
         {
+            foreach (var particle in m_particles)
+                particle.CachePosition();
+
             for (var i = 0; i < m_gridValuePoints.Length; i++)
             {
                 m_gridValuePoints[i].value = 0.0f;
@@ -330,15 +327,18 @@ namespace UnityPrototype
             var i = cellIndex % cols;
             var j = cellIndex / cols;
 
-            // TODO don't use dynamic arrays
-            var worldIndices = new int[] {
-                extendedCols * (j + 0) + (i + 0),
-                extendedCols * (j + 0) + (i + 1),
-                extendedCols * (j + 1) + (i + 1),
-                extendedCols * (j + 1) + (i + 0),
-            };
+            var offset = sm_worldValuePointIndexOffsets[localValuePointIndex];
+            return extendedCols * (j + offset.y) + (i + offset.x);
 
-            return worldIndices[localValuePointIndex];
+            // // TODO don't use dynamic arrays
+            // var worldIndices = new int[] {
+            //     extendedCols * (j + 0) + (i + 0),
+            //     extendedCols * (j + 0) + (i + 1),
+            //     extendedCols * (j + 1) + (i + 1),
+            //     extendedCols * (j + 1) + (i + 0),
+            // };
+
+            // return worldIndices[localValuePointIndex];
         }
 
         public int LocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
@@ -349,15 +349,18 @@ namespace UnityPrototype
             var i = cellIndex % cols;
             var j = cellIndex / cols;
 
-            // TODO don't use dynamic arrays
-            var worldIndices = new int[] {
-                2 * extendedCols * (j + 0) + 2 * i + 1,
-                2 * extendedCols * (j + 0) + 2 * i + 2,
-                2 * extendedCols * (j + 1) + 2 * i + 1,
-                2 * extendedCols * (j + 0) + 2 * i + 0,
-            };
+            var offset = sm_worldControlPointIndexOffsets[localControlPointIndex];
+            return 2 * extendedCols * (j + offset.y) + 2 * (i + offset.x) + offset.z;
 
-            return worldIndices[localControlPointIndex];
+            // // TODO don't use dynamic arrays
+            // var worldIndices = new int[] {
+            //     2 * extendedCols * (j + 0) + 2 * (i + 0) + 1,
+            //     2 * extendedCols * (j + 0) + 2 * (i + 1) + 0,
+            //     2 * extendedCols * (j + 1) + 2 * (i + 0) + 1,
+            //     2 * extendedCols * (j + 0) + 2 * (i + 0) + 0,
+            // };
+
+            // return worldIndices[localControlPointIndex];
         }
 
         public int LocalToWorldPointIndex(int cellIndex, int localPointIndex)

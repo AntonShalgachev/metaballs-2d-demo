@@ -8,7 +8,7 @@ namespace UnityPrototype
     {
         public abstract float CalculatePotential(Vector2 position);
 
-        protected Vector2 m_position => transform.localPosition;
+        protected Vector2 m_position;
 
         private MetaballSurface m_surface = null;
 
@@ -25,6 +25,11 @@ namespace UnityPrototype
         private void OnDisable()
         {
             m_surface.RemoveParticle(this);
+        }
+
+        public void CachePosition()
+        {
+            m_position = transform.localPosition;
         }
     }
 }
