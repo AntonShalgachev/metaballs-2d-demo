@@ -112,40 +112,7 @@ namespace UnityPrototype
 
                 return configuration;
             }
-
-            // public Vector2 GetEdgePoint(int edgePointId)
-            // {
-            //     var sourceVertex = vertices[edgePointId];
-            //     var destinationVertex = vertices[(edgePointId + 1) % vertices.Count];
-
-            //     var relativePosition = 0.5f;
-            //     if (m_surface.m_interpolateEdgePoints)
-            //         relativePosition = Mathf.InverseLerp(sourceVertex.value, destinationVertex.value, m_surface.m_isoThreshold);
-
-            //     return Vector2.Lerp(sourceVertex.position, destinationVertex.position, relativePosition);
-            // }
-
-            // public Vector2 GetCellPoint(int pointId)
-            // {
-            //     var index = pointId / 2;
-
-            //     if (pointId % 2 == 1)
-            //         return GetEdgePoint(index);
-
-            //     return vertices[index].position;
-            // }
-
-            // public int LocalToWorldVertexIndex(int localIndex)
-            // {
-            //     return m_surface.LocalToWorldPointIndex(m_index, localIndex);
-            // }
         }
-
-        // private enum GridPointType
-        // {
-        //     Value,
-        //     Control,
-        // }
 
         [SerializeField] private Transform m_gridTransform = null;
         [SerializeField] private Vector2Int m_gridResolution = Vector2Int.one * 10;
@@ -237,9 +204,6 @@ namespace UnityPrototype
 
         private GridControlPoint CreateGridControlPoint(Vector2Int cellLocation, Vector2Int endLocationOffset)
         {
-            // var inverseResolution = new Vector2(1.0f / m_gridResolution.x, 1.0f / m_gridResolution.y); // TODO calculate once
-            // var position = GridLocationToPosition(inverseResolution, m_gridCenter, m_gridRange, location);
-
             var startLocation = cellLocation;
             var endLocation = cellLocation + endLocationOffset;
             var startIndex = CalculateGridLinearIndex(startLocation.x, startLocation.y, m_extendedGridResolution);
@@ -314,11 +278,6 @@ namespace UnityPrototype
             }
         }
 
-        // public int LocalToWorldPointIndex(int cellIndex, int localPointIndex)
-        // {
-        //     return 0;
-        // }
-
         public int LocalToWorldValuePointIndex(int cellIndex, int localValuePointIndex)
         {
             var cols = m_gridResolution.x;
@@ -329,16 +288,6 @@ namespace UnityPrototype
 
             var offset = sm_worldValuePointIndexOffsets[localValuePointIndex];
             return extendedCols * (j + offset.y) + (i + offset.x);
-
-            // // TODO don't use dynamic arrays
-            // var worldIndices = new int[] {
-            //     extendedCols * (j + 0) + (i + 0),
-            //     extendedCols * (j + 0) + (i + 1),
-            //     extendedCols * (j + 1) + (i + 1),
-            //     extendedCols * (j + 1) + (i + 0),
-            // };
-
-            // return worldIndices[localValuePointIndex];
         }
 
         public int LocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
@@ -351,16 +300,6 @@ namespace UnityPrototype
 
             var offset = sm_worldControlPointIndexOffsets[localControlPointIndex];
             return 2 * extendedCols * (j + offset.y) + 2 * (i + offset.x) + offset.z;
-
-            // // TODO don't use dynamic arrays
-            // var worldIndices = new int[] {
-            //     2 * extendedCols * (j + 0) + 2 * (i + 0) + 1,
-            //     2 * extendedCols * (j + 0) + 2 * (i + 1) + 0,
-            //     2 * extendedCols * (j + 1) + 2 * (i + 0) + 1,
-            //     2 * extendedCols * (j + 0) + 2 * (i + 0) + 0,
-            // };
-
-            // return worldIndices[localControlPointIndex];
         }
 
         public int LocalToWorldPointIndex(int cellIndex, int localPointIndex)

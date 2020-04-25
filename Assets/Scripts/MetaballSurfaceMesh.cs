@@ -77,20 +77,13 @@ namespace UnityPrototype
             var indices = new List<int>();
 
             for (var i = 0; i < m_surface.cellsCount; i++)
-            // foreach (var cell in m_surface.EnumerateGridCells())
             {
                 var configuration = m_surface.CalculateCellConfiguration(i);
 
                 var localTriangleIndices = sm_cellTriangleIndices[configuration];
 
                 foreach (var localIndex in localTriangleIndices)
-                {
-                    // var position = cell.GetCellPoint(index);
-                    // vertices.Add(position);
-                    // indices.Add(indices.Count);
                     indices.Add(m_surface.LocalToWorldPointIndex(i, localIndex));
-                    // indices.Add(cell.LocalToWorldVertexIndex(localIndex));
-                }
             }
 
             m_mesh.Clear();
