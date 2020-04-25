@@ -180,7 +180,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 0}
+  - {fileID: 2100000, guid: 99af4dd929e70e1418573eeabe953159, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -375,7 +375,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_gridTransform: {fileID: 1300866384}
-  m_gridResolution: {x: 100, y: 100}
+  m_gridResolution: {x: 50, y: 50}
   m_isoThreshold: 0.5
   m_interpolateEdgePoints: 1
   m_drawPointGizmos: 1

@@ -7,47 +7,90 @@ namespace UnityPrototype
 {
     public class MetaballSurface : MonoBehaviour
     {
-        public class GridPoint
+        // Grid cell:
+        // 6        5        4
+        //   X------o------X
+        //   |             |
+        //   |             |
+        // 7 o             o 3
+        //   |             |
+        //   |             |
+        //   X------o------X
+        // 0        1        2
+        // 
+        // X -- Grid value point
+        // o -- Grid control point
+        // i -- cell point local index
+
+        public struct GridValuePoint
         {
-            private MetaballSurface m_surface = null;
+            private MetaballSurface m_surface;
 
-            public Vector2 position = Vector2.zero;
-            public float value = 0.0f;
-
+            public Vector2 position;
+            public float value;
             public bool active => value >= m_surface.m_isoThreshold;
 
-            public GridPoint(MetaballSurface surface, Vector2 position)
+            public GridValuePoint(MetaballSurface surface, Vector2 position)
             {
                 m_surface = surface;
-
                 this.position = position;
+                this.value = 0.0f;
             }
 
             override public string ToString()
             {
-                return $"GridPoint {{ Value={value} }}";
+                return $"GridValuePoint {{ Value={value} }}";
+            }
+        }
+
+        public struct GridControlPoint
+        {
+            private MetaballSurface m_surface;
+
+            public int startValuePointIndex { get; private set; }
+            public int endValuePointIndex { get; private set; }
+            public float relativePosition;
+            public bool valid => startValuePointIndex >= 0 && endValuePointIndex >= 0;
+            public Vector2 position => CalculatePosition();
+
+            public GridControlPoint(MetaballSurface surface, int startValuePointIndex, int endValuePointIndex)
+            {
+                m_surface = surface;
+                this.startValuePointIndex = startValuePointIndex;
+                this.endValuePointIndex = endValuePointIndex;
+
+                relativePosition = 0.5f;
+            }
+
+            private Vector2 CalculatePosition()
+            {
+                var startPosition = m_surface.GetValuePointPosition(startValuePointIndex);
+                var endPosition = m_surface.GetValuePointPosition(endValuePointIndex);
+
+                return Vector2.Lerp(startPosition, endPosition, relativePosition);
             }
         }
 
         public class GridCell
         {
             private MetaballSurface m_surface = null;
+            private int m_index = 0;
 
-            public List<GridPoint> vertices;
+            private static int sm_valuePointsCount = 4;
 
-            public GridCell(MetaballSurface surface, List<GridPoint> vertices)
+            public GridCell(MetaballSurface surface, int cellIndex)
             {
                 m_surface = surface;
-
-                this.vertices = vertices;
+                m_index = cellIndex;
             }
 
             public int CalculateConfiguration()
             {
                 int configuration = 0;
-                for (var i = 0; i < vertices.Count; i++)
+                for (var i = 0; i < sm_valuePointsCount; i++)
                 {
-                    var active = vertices[i].active;
+                    var worldValuePointIndex = m_surface.LocalToWorldValuePointIndex(m_index, i);
+                    var active = m_surface.IsValuePointActive(worldValuePointIndex);
                     var value = (1 << i) * (active ? 1 : 0);
                     configuration += value;
                 }
@@ -55,28 +98,39 @@ namespace UnityPrototype
                 return configuration;
             }
 
-            public Vector2 GetEdgePoint(int edgePointId)
-            {
-                var sourceVertex = vertices[edgePointId];
-                var destinationVertex = vertices[(edgePointId + 1) % vertices.Count];
+            // public Vector2 GetEdgePoint(int edgePointId)
+            // {
+            //     var sourceVertex = vertices[edgePointId];
+            //     var destinationVertex = vertices[(edgePointId + 1) % vertices.Count];
 
-                var relativePosition = 0.5f;
-                if (m_surface.m_interpolateEdgePoints)
-                    relativePosition = Mathf.InverseLerp(sourceVertex.value, destinationVertex.value, m_surface.m_isoThreshold);
+            //     var relativePosition = 0.5f;
+            //     if (m_surface.m_interpolateEdgePoints)
+            //         relativePosition = Mathf.InverseLerp(sourceVertex.value, destinationVertex.value, m_surface.m_isoThreshold);
 
-                return Vector2.Lerp(sourceVertex.position, destinationVertex.position, relativePosition);
-            }
+            //     return Vector2.Lerp(sourceVertex.position, destinationVertex.position, relativePosition);
+            // }
 
-            public Vector2 GetCellPoint(int pointId)
-            {
-                var index = pointId / 2;
+            // public Vector2 GetCellPoint(int pointId)
+            // {
+            //     var index = pointId / 2;
 
-                if (pointId % 2 == 1)
-                    return GetEdgePoint(index);
+            //     if (pointId % 2 == 1)
+            //         return GetEdgePoint(index);
 
-                return vertices[index].position;
-            }
+            //     return vertices[index].position;
+            // }
+
+            // public int LocalToWorldVertexIndex(int localIndex)
+            // {
+            //     return m_surface.LocalToWorldPointIndex(m_index, localIndex);
+            // }
         }
+
+        // private enum GridPointType
+        // {
+        //     Value,
+        //     Control,
+        // }
 
         [SerializeField] private Transform m_gridTransform = null;
         [SerializeField] private Vector2Int m_gridResolution = Vector2Int.one * 10;
@@ -103,8 +157,12 @@ namespace UnityPrototype
         }
         private float m_particlesCount => m_particles.Count;
 
-        private GridPoint[,] m_gridPoints = null;
-        private GridCell[,] m_gridCells = null;
+        private Vector2Int m_extendedGridResolution => m_gridResolution + Vector2Int.one;
+        public int cellsCount => m_gridResolution.x * m_gridResolution.y;
+
+        private GridValuePoint[] m_gridValuePoints = null;
+        private GridControlPoint[] m_gridControlPoints = null;
+        private GridCell[] m_gridCells = null;
 
         private List<IMetaballShape> FindParticles()
         {
@@ -127,97 +185,216 @@ namespace UnityPrototype
             RecreateGrid();
         }
 
-        private GridPoint CreateGridPoint(Vector2Int location)
+        private static int CalculateGridLinearIndex(int x, int y, Vector2Int gridResolution)
         {
-            var inverseResolution = new Vector2(1.0f / m_gridResolution.x, 1.0f / m_gridResolution.y);
+            return x + y * gridResolution.x;
+        }
+
+        private static Vector2 GridLocationToPosition(Vector2 inverseResolution, Vector2 center, Vector2 range, Vector2Int location)
+        {
             var relativePos = Vector2.Scale(location, inverseResolution); // [0; 1]
-            var position = m_gridCenter - 0.5f * m_gridRange + Vector2.Scale(relativePos, m_gridRange);
-
-            return new GridPoint(this, position);
+            return center - 0.5f * range + Vector2.Scale(relativePos, range);
         }
 
-        private GridPoint GetGridPoint(Vector2Int location)
+        private GridValuePoint CreateGridValuePoint(Vector2Int location)
         {
-            return m_gridPoints[location.x, location.y];
+            var inverseResolution = new Vector2(1.0f / m_gridResolution.x, 1.0f / m_gridResolution.y); // TODO calculate once
+            var position = GridLocationToPosition(inverseResolution, m_gridCenter, m_gridRange, location);
+
+            return new GridValuePoint(this, position);
         }
 
-        private GridCell CreateGridCell(Vector2Int location)
+        private GridControlPoint CreateGridControlPoint(Vector2Int cellLocation, Vector2Int endLocationOffset)
         {
-            // TODO create only once
-            var pointOffsets = new List<Vector2Int>
-            {
-                Vector2Int.zero,
-                Vector2Int.right,
-                Vector2Int.one,
-                Vector2Int.up,
-            };
+            // var inverseResolution = new Vector2(1.0f / m_gridResolution.x, 1.0f / m_gridResolution.y); // TODO calculate once
+            // var position = GridLocationToPosition(inverseResolution, m_gridCenter, m_gridRange, location);
 
-            var cellVertices = new List<GridPoint>();
-            foreach (var offset in pointOffsets)
-                cellVertices.Add(GetGridPoint(location + offset));
+            var startLocation = cellLocation;
+            var endLocation = cellLocation + endLocationOffset;
+            var startIndex = CalculateGridLinearIndex(startLocation.x, startLocation.y, m_extendedGridResolution);
+            var endIndex = CalculateGridLinearIndex(endLocation.x, endLocation.y, m_extendedGridResolution);
 
-            return new GridCell(this, cellVertices);
+            if (startIndex >= m_gridValuePoints.Length)
+                startIndex = -1;
+            if (endIndex >= m_gridValuePoints.Length)
+                endIndex = -1;
+
+            return new GridControlPoint(this, startIndex, endIndex);
         }
+
+        // private GridPoint GetGridPoint(Vector2Int location)
+        // {
+        //     return m_gridValuePoints[CalculateGridLinearIndex(location.x, location.y, m_gridResolution + Vector2Int.one)];
+        // }
+
+        // private GridCell CreateGridCell(int cellIndex)
+        // {
+        //     // // TODO create only once
+        //     // var pointOffsets = new List<Vector2Int>
+        //     // {
+        //     //     Vector2Int.zero,
+        //     //     Vector2Int.right,
+        //     //     Vector2Int.one,
+        //     //     Vector2Int.up,
+        //     // };
+
+        //     // var cellVertices = new List<GridPoint>();
+        //     // foreach (var offset in pointOffsets)
+        //     //     cellVertices.Add(GetGridPoint(location + offset));
+
+        //     return new GridCell(this, cellIndex);
+        // }
 
         private GridCell GetGridCell(Vector2Int location)
         {
-            return m_gridCells[location.x, location.y];
+            return m_gridCells[CalculateGridLinearIndex(location.x, location.y, m_gridResolution)];
         }
 
-        public IEnumerable<GridPoint> EnumerateGridPoints()
-        {
-            for (var i = 0; i <= m_gridResolution.x; i++)
-                for (var j = 0; j <= m_gridResolution.y; j++)
-                    yield return m_gridPoints[i, j];
-        }
+        // public IEnumerable<GridPoint> EnumerateGridPoints()
+        // {
+        //     for (var i = 0; i <= m_gridResolution.x; i++)
+        //         for (var j = 0; j <= m_gridResolution.y; j++)
+        //             yield return GetGridPoint(new Vector2Int(i, j)); // TODO inefficient
+        // }
 
-        public IEnumerable<GridCell> EnumerateGridCells()
-        {
-            for (var i = 0; i < m_gridResolution.x; i++)
-                for (var j = 0; j < m_gridResolution.y; j++)
-                    yield return m_gridCells[i, j];
-        }
+        // public IEnumerable<GridCell> EnumerateGridCells()
+        // {
+        //     for (var i = 0; i < m_gridResolution.x; i++)
+        //         for (var j = 0; j < m_gridResolution.y; j++)
+        //             yield return GetGridCell(new Vector2Int(i, j)); // TODO inefficient
+        // }
 
         private void RecreateGrid()
         {
-            m_gridPoints = new GridPoint[m_gridResolution.x + 1, m_gridResolution.y + 1];
-            for (var i = 0; i <= m_gridResolution.x; i++)
-                for (var j = 0; j <= m_gridResolution.y; j++)
-                    m_gridPoints[i, j] = CreateGridPoint(new Vector2Int(i, j));
+            // TODO refactor this fucking index mess
 
-            m_gridCells = new GridCell[m_gridResolution.x, m_gridResolution.y];
+            m_gridValuePoints = new GridValuePoint[m_extendedGridResolution.x * m_extendedGridResolution.y];
+            m_gridControlPoints = new GridControlPoint[2 * m_extendedGridResolution.x * m_extendedGridResolution.y];
+            for (var i = 0; i < m_extendedGridResolution.x; i++)
+            {
+                for (var j = 0; j < m_extendedGridResolution.y; j++)
+                {
+                    var baseIndex = CalculateGridLinearIndex(i, j, m_extendedGridResolution);
+                    var location = new Vector2Int(i, j);
+                    m_gridValuePoints[baseIndex] = CreateGridValuePoint(location);
+                    m_gridControlPoints[2 * baseIndex + 0] = CreateGridControlPoint(location, Vector2Int.up);
+                    m_gridControlPoints[2 * baseIndex + 1] = CreateGridControlPoint(location, Vector2Int.right);
+                }
+            }
+
+            m_gridCells = new GridCell[m_gridResolution.x * m_gridResolution.y];
             for (var i = 0; i < m_gridResolution.x; i++)
+            {
                 for (var j = 0; j < m_gridResolution.y; j++)
-                    m_gridCells[i, j] = CreateGridCell(new Vector2Int(i, j));
+                {
+                    var cellIndex = CalculateGridLinearIndex(i, j, m_gridResolution);
+                    m_gridCells[cellIndex] = new GridCell(this, cellIndex);
+                }
+            }
         }
 
         public void UpdateField()
         {
-            foreach (var point in EnumerateGridPoints())
+            for (var i = 0; i < m_gridValuePoints.Length; i++)
             {
-                point.value = 0.0f;
+                m_gridValuePoints[i].value = 0.0f;
                 foreach (var particle in m_particles)
-                    point.value += particle.CalculatePotential(point.position);
+                    m_gridValuePoints[i].value += particle.CalculatePotential(m_gridValuePoints[i].position);
             }
 
-            // foreach (var cell in EnumerateGridCells())
-            // {
-            //     var configuration = cell.CalculateConfiguration();
+            for (var i = 0; i < m_gridControlPoints.Length; i++)
+            {
+                if (!m_gridControlPoints[i].valid)
+                    continue;
 
-            //     var indices = sm_cellTriangleIndices[configuration];
+                var startValuePointIndex = m_gridControlPoints[i].startValuePointIndex;
+                var endValuePointIndex = m_gridControlPoints[i].endValuePointIndex;
 
+                var relativePosition = 0.5f;
+                if (m_interpolateEdgePoints)
+                    relativePosition = Mathf.InverseLerp(m_gridValuePoints[startValuePointIndex].value, m_gridValuePoints[endValuePointIndex].value, m_isoThreshold);
+                m_gridControlPoints[i].relativePosition = relativePosition;
+            }
+        }
 
+        // public int LocalToWorldPointIndex(int cellIndex, int localPointIndex)
+        // {
+        //     return 0;
+        // }
 
-            //     // foreach (var edge in sm_cellEdges[configuration])
-            //     // {
-            //     //     var edgePoints = sm_cellEdgePoints[edge];
+        public int LocalToWorldValuePointIndex(int cellIndex, int localValuePointIndex)
+        {
+            var cols = m_gridResolution.x;
+            var extendedCols = m_extendedGridResolution.x;
 
-            //     //     var from = cell.GetCellPoint(edgePoints[0]);
-            //     //     var to = cell.GetCellPoint(edgePoints[1]);
+            var i = cellIndex % cols;
+            var j = cellIndex / cols;
 
-            //     //     Debug.DrawLine(transform.TransformPoint(from), transform.TransformPoint(to), Color.red);
-            //     // }
-            // }
+            // TODO don't use dynamic arrays
+            var worldIndices = new int[] {
+                extendedCols * (j + 0) + (i + 0),
+                extendedCols * (j + 0) + (i + 1),
+                extendedCols * (j + 1) + (i + 1),
+                extendedCols * (j + 1) + (i + 0),
+            };
+
+            return worldIndices[localValuePointIndex];
+        }
+
+        public int LocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
+        {
+            var cols = m_gridResolution.x;
+            var extendedCols = m_extendedGridResolution.x;
+
+            var i = cellIndex % cols;
+            var j = cellIndex / cols;
+
+            // TODO don't use dynamic arrays
+            var worldIndices = new int[] {
+                2 * extendedCols * (j + 0) + 2 * i + 1,
+                2 * extendedCols * (j + 0) + 2 * i + 2,
+                2 * extendedCols * (j + 1) + 2 * i + 1,
+                2 * extendedCols * (j + 0) + 2 * i + 0,
+            };
+
+            return worldIndices[localControlPointIndex];
+        }
+
+        public int LocalToWorldPointIndex(int cellIndex, int localPointIndex)
+        {
+            var index = localPointIndex / 2;
+
+            if (localPointIndex % 2 == 0)
+                return LocalToWorldValuePointIndex(cellIndex, index);
+
+            return LocalToWorldControlPointIndex(cellIndex, index) + m_gridValuePoints.Length;
+        }
+
+        public List<Vector3> GetVertices()
+        {
+            var vertices = new List<Vector3>();
+
+            foreach (var point in m_gridValuePoints)
+                vertices.Add(point.position);
+            foreach (var point in m_gridControlPoints)
+                vertices.Add(point.valid ? point.position : Vector2.zero);
+
+            return vertices;
+        }
+
+        public Vector2 GetValuePointPosition(int index)
+        {
+            return m_gridValuePoints[index].position;
+        }
+
+        public bool IsValuePointActive(int index)
+        {
+            return m_gridValuePoints[index].active;
+        }
+
+        public int CalculateCellConfiguration(int cellIndex)
+        {
+            return m_gridCells[cellIndex].CalculateConfiguration();
         }
 
         private void OnDrawGizmos()
@@ -238,15 +415,24 @@ namespace UnityPrototype
                 GizmosHelper.DrawVector(gridCenter, Vector3.forward, 0.1f);
             }
 
-            if (m_drawPointGizmos && m_gridPoints != null)
+            if (m_drawPointGizmos && m_gridValuePoints != null)
             {
-                foreach (var point in m_gridPoints)
+                foreach (var point in m_gridValuePoints)
                 {
                     if (m_useIsoThresholdForColor)
                         Gizmos.color = point.active ? Color.white : Color.black;
                     else
                         Gizmos.color = Color.Lerp(Color.black, Color.white, point.value);
 
+                    Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
+                }
+
+                foreach (var point in m_gridControlPoints)
+                {
+                    if (!point.valid)
+                        continue;
+
+                    Gizmos.color = Color.green;
                     Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
                 }
             }

@@ -9,23 +9,6 @@ namespace UnityPrototype
         [SerializeField] private MetaballSurface m_surface = null;
 
         private static int[][] sm_cellTriangleIndices = new int[][] {
-            // TriangulateConvexPolygon(new int[] {}),
-            // TriangulateConvexPolygon(new int[] {0, 1, 7}),
-            // TriangulateConvexPolygon(new int[] {1, 2, 3}),
-            // TriangulateConvexPolygon(new int[] {0, 2, 3, 7}),
-            // TriangulateConvexPolygon(new int[] {5, 3, 4}),
-            // TriangulateConvexPolygon(new int[] {0, 1, 3, 4, 5, 7}),
-            // TriangulateConvexPolygon(new int[] {1, 2, 4, 5}),
-            // TriangulateConvexPolygon(new int[] {0, 2, 4, 5, 7}),
-            // TriangulateConvexPolygon(new int[] {7, 5, 6}),
-            // TriangulateConvexPolygon(new int[] {0, 1, 5, 6}),
-            // TriangulateConvexPolygon(new int[] {1, 2, 3, 5, 6, 7}),
-            // TriangulateConvexPolygon(new int[] {0, 2, 3, 5, 6}),
-            // TriangulateConvexPolygon(new int[] {7, 3, 4, 6}),
-            // TriangulateConvexPolygon(new int[] {0, 1, 3, 4, 6}),
-            // TriangulateConvexPolygon(new int[] {1, 2, 4, 6, 7}),
-            // TriangulateConvexPolygon(new int[] {0, 2, 4, 6}),
-
             TriangulateConvexPolygon(new int[] {}),
             TriangulateConvexPolygon(new int[] {7, 1, 0}),
             TriangulateConvexPolygon(new int[] {3, 2, 1}),
@@ -42,34 +25,6 @@ namespace UnityPrototype
             TriangulateConvexPolygon(new int[] {6, 4, 3, 1, 0}),
             TriangulateConvexPolygon(new int[] {7, 6, 4, 2, 1}),
             TriangulateConvexPolygon(new int[] {6, 4, 2, 0}),
-        };
-
-        private static int[][] sm_cellEdgePoints = new int[][] {
-            new int[] { 1, 3 },
-            new int[] { 1, 5 },
-            new int[] { 1, 7 },
-            new int[] { 3, 5 },
-            new int[] { 3, 7 },
-            new int[] { 5, 7 },
-        };
-
-        private static int[][] sm_cellEdges = new int[][] {
-            new int[] {},
-            new int[] {2},
-            new int[] {0},
-            new int[] {4},
-            new int[] {3},
-            new int[] {0, 5},
-            new int[] {1},
-            new int[] {5},
-            new int[] {5},
-            new int[] {1},
-            new int[] {2, 3},
-            new int[] {3},
-            new int[] {4},
-            new int[] {0},
-            new int[] {2},
-            new int[] {},
         };
 
         private Mesh m_mesh = null;
@@ -118,37 +73,29 @@ namespace UnityPrototype
         {
             m_surface.UpdateField();
 
-            var vertices = new List<Vector3>();
+            var vertices = m_surface.GetVertices();
             var indices = new List<int>();
 
-            foreach (var cell in m_surface.EnumerateGridCells())
+            for (var i = 0; i < m_surface.cellsCount; i++)
+            // foreach (var cell in m_surface.EnumerateGridCells())
             {
-                var configuration = cell.CalculateConfiguration();
+                var configuration = m_surface.CalculateCellConfiguration(i);
 
                 var localTriangleIndices = sm_cellTriangleIndices[configuration];
 
-                foreach (var index in localTriangleIndices)
+                foreach (var localIndex in localTriangleIndices)
                 {
-                    var position = cell.GetCellPoint(index);
-                    vertices.Add(position);
-                    indices.Add(indices.Count);
-                }
-
-                foreach (var edge in sm_cellEdges[configuration])
-                {
-                    var edgePoints = sm_cellEdgePoints[edge];
-
-                    var from = cell.GetCellPoint(edgePoints[0]);
-                    var to = cell.GetCellPoint(edgePoints[1]);
-
-                    Debug.DrawLine(transform.TransformPoint(from), transform.TransformPoint(to), Color.red);
+                    // var position = cell.GetCellPoint(index);
+                    // vertices.Add(position);
+                    // indices.Add(indices.Count);
+                    indices.Add(m_surface.LocalToWorldPointIndex(i, localIndex));
+                    // indices.Add(cell.LocalToWorldVertexIndex(localIndex));
                 }
             }
 
             m_mesh.Clear();
             m_mesh.SetVertices(vertices);
             m_mesh.SetTriangles(indices, 0);
-            // m_mesh.RecalculateNormals();
             m_mesh.RecalculateBounds();
         }
     }
