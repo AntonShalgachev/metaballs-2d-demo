@@ -28,6 +28,7 @@ namespace UnityPrototype
         };
 
         private Mesh m_mesh = null;
+        private List<int> m_indices = new List<int>();
 
         private void Awake()
         {
@@ -73,8 +74,17 @@ namespace UnityPrototype
         {
             m_surface.UpdateField();
 
-            var vertices = m_surface.GetVertices();
-            var indices = new List<int>();
+            CalculateMeshIndices();
+
+            m_mesh.Clear();
+            m_mesh.SetVertices(m_surface.GetVertices());
+            m_mesh.SetTriangles(m_indices, 0);
+            m_mesh.RecalculateBounds();
+        }
+
+        private void CalculateMeshIndices()
+        {
+            m_indices.Clear();
 
             for (var i = 0; i < m_surface.cellsCount; i++)
             {
@@ -83,13 +93,8 @@ namespace UnityPrototype
                 var localTriangleIndices = sm_cellTriangleIndices[configuration];
 
                 foreach (var localIndex in localTriangleIndices)
-                    indices.Add(m_surface.LocalToWorldPointIndex(i, localIndex));
+                    m_indices.Add(m_surface.LocalToWorldPointIndex(i, localIndex));
             }
-
-            m_mesh.Clear();
-            m_mesh.SetVertices(vertices);
-            m_mesh.SetTriangles(indices, 0);
-            m_mesh.RecalculateBounds();
         }
     }
 }

@@ -79,6 +79,9 @@ namespace UnityPrototype
 
             private Vector2 CalculatePosition()
             {
+                if (!valid)
+                    return Vector2.zero;
+
                 var startPosition = m_surface.GetValuePointPosition(startValuePointIndex);
                 var endPosition = m_surface.GetValuePointPosition(endValuePointIndex);
 
@@ -86,17 +89,22 @@ namespace UnityPrototype
             }
         }
 
-        public class GridCell
+        public readonly struct GridCell
         {
-            private MetaballSurface m_surface = null;
-            private int m_index = 0;
+            private readonly MetaballSurface m_surface;
+            private readonly int m_index;
 
             private static int sm_valuePointsCount = 4;
+            private readonly int[] m_valuePointsWorldIndices;
 
             public GridCell(MetaballSurface surface, int cellIndex)
             {
                 m_surface = surface;
                 m_index = cellIndex;
+
+                m_valuePointsWorldIndices = new int[sm_valuePointsCount];
+                for (var i = 0; i < m_valuePointsWorldIndices.Length; i++)
+                    m_valuePointsWorldIndices[i] = m_surface.LocalToWorldValuePointIndex(m_index, i);
             }
 
             public int CalculateConfiguration()
@@ -104,8 +112,8 @@ namespace UnityPrototype
                 int configuration = 0;
                 for (var i = 0; i < sm_valuePointsCount; i++)
                 {
-                    var worldValuePointIndex = m_surface.LocalToWorldValuePointIndex(m_index, i);
-                    var active = m_surface.IsValuePointActive(worldValuePointIndex);
+                    var worldIndex = m_valuePointsWorldIndices[i];
+                    var active = m_surface.IsValuePointActive(worldIndex);
                     var value = (1 << i) * (active ? 1 : 0);
                     configuration += value;
                 }
@@ -140,11 +148,13 @@ namespace UnityPrototype
         private float m_particlesCount => m_particles.Count;
 
         private Vector2Int m_extendedGridResolution;
-        public int cellsCount;
+        public int cellsCount { get; private set; }
 
         private GridValuePoint[] m_gridValuePoints = null;
         private GridControlPoint[] m_gridControlPoints = null;
         private GridCell[] m_gridCells = null;
+
+        private Vector3[] m_vertices;
 
         private static readonly Vector2Int[] sm_worldValuePointIndexOffsets = new Vector2Int[] {
                 Vector2Int.zero,
@@ -178,8 +188,6 @@ namespace UnityPrototype
 
         private void Awake()
         {
-            m_extendedGridResolution = m_gridResolution + Vector2Int.one;
-            cellsCount = m_gridResolution.x * m_gridResolution.y;
             RecreateGrid();
         }
 
@@ -222,8 +230,14 @@ namespace UnityPrototype
             return m_gridCells[CalculateGridLinearIndex(location.x, location.y, m_gridResolution)];
         }
 
+        private int[][] m_localToWorldValuePointIndices;
+        private int[][] m_localToWorldControlPointIndices;
+
         private void RecreateGrid()
         {
+            m_extendedGridResolution = m_gridResolution + Vector2Int.one;
+            cellsCount = m_gridResolution.x * m_gridResolution.y;
+
             // TODO refactor this fucking index mess
 
             m_gridValuePoints = new GridValuePoint[m_extendedGridResolution.x * m_extendedGridResolution.y];
@@ -240,6 +254,25 @@ namespace UnityPrototype
                 }
             }
 
+            m_vertices = new Vector3[m_gridValuePoints.Length + m_gridControlPoints.Length];
+            for (var i = 0; i < m_gridValuePoints.Length; i++)
+                m_vertices[i] = m_gridValuePoints[i].position;
+
+            m_localToWorldValuePointIndices = new int[cellsCount][];
+            m_localToWorldControlPointIndices = new int[cellsCount][];
+
+            for (var cellIndex = 0; cellIndex < cellsCount; cellIndex++)
+            {
+                m_localToWorldValuePointIndices[cellIndex] = new int[4];
+                m_localToWorldControlPointIndices[cellIndex] = new int[4];
+
+                for (var i = 0; i < 4; i++)
+                {
+                    m_localToWorldValuePointIndices[cellIndex][i] = CalculateLocalToWorldValuePointIndex(cellIndex, i);
+                    m_localToWorldControlPointIndices[cellIndex][i] = CalculateLocalToWorldControlPointIndex(cellIndex, i);
+                }
+            }
+
             m_gridCells = new GridCell[m_gridResolution.x * m_gridResolution.y];
             for (var i = 0; i < m_gridResolution.x; i++)
             {
@@ -253,15 +286,39 @@ namespace UnityPrototype
 
         public void UpdateField()
         {
+            UpdateParticles();
+            UpdateValuePoints();
+            UpdateControlPoints();
+        }
+
+        private void UpdateParticles()
+        {
             foreach (var particle in m_particles)
                 particle.CachePosition();
+        }
 
+        private void UpdateValuePoints()
+        {
             for (var i = 0; i < m_gridValuePoints.Length; i++)
             {
                 m_gridValuePoints[i].value = 0.0f;
                 foreach (var particle in m_particles)
                     m_gridValuePoints[i].value += particle.CalculatePotential(m_gridValuePoints[i].position);
             }
+        }
+
+        private float InverseLerpUnclamped(float a, float b, float v)
+        {
+            var range = b - a;
+            if (range == 0.0f)
+                return 0.5f;
+            return (v - a) / range;
+        }
+
+        private void UpdateControlPoints()
+        {
+            if (!m_interpolateEdgePoints)
+                return;
 
             for (var i = 0; i < m_gridControlPoints.Length; i++)
             {
@@ -271,14 +328,21 @@ namespace UnityPrototype
                 var startValuePointIndex = m_gridControlPoints[i].startValuePointIndex;
                 var endValuePointIndex = m_gridControlPoints[i].endValuePointIndex;
 
-                var relativePosition = 0.5f;
-                if (m_interpolateEdgePoints)
-                    relativePosition = Mathf.InverseLerp(m_gridValuePoints[startValuePointIndex].value, m_gridValuePoints[endValuePointIndex].value, m_isoThreshold);
-                m_gridControlPoints[i].relativePosition = relativePosition;
+                m_gridControlPoints[i].relativePosition = InverseLerpUnclamped(m_gridValuePoints[startValuePointIndex].value, m_gridValuePoints[endValuePointIndex].value, m_isoThreshold);
             }
         }
 
         public int LocalToWorldValuePointIndex(int cellIndex, int localValuePointIndex)
+        {
+            return m_localToWorldValuePointIndices[cellIndex][localValuePointIndex];
+        }
+
+        public int LocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
+        {
+            return m_localToWorldControlPointIndices[cellIndex][localControlPointIndex];
+        }
+
+        public int CalculateLocalToWorldValuePointIndex(int cellIndex, int localValuePointIndex)
         {
             var cols = m_gridResolution.x;
             var extendedCols = m_extendedGridResolution.x;
@@ -290,7 +354,7 @@ namespace UnityPrototype
             return extendedCols * (j + offset.y) + (i + offset.x);
         }
 
-        public int LocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
+        public int CalculateLocalToWorldControlPointIndex(int cellIndex, int localControlPointIndex)
         {
             var cols = m_gridResolution.x;
             var extendedCols = m_extendedGridResolution.x;
@@ -312,16 +376,12 @@ namespace UnityPrototype
             return LocalToWorldControlPointIndex(cellIndex, index) + m_gridValuePoints.Length;
         }
 
-        public List<Vector3> GetVertices()
+        public Vector3[] GetVertices()
         {
-            var vertices = new List<Vector3>();
+            for (var i = 0; i < m_gridControlPoints.Length; i++)
+                m_vertices[m_gridValuePoints.Length + i] = m_gridControlPoints[i].position;
 
-            foreach (var point in m_gridValuePoints)
-                vertices.Add(point.position);
-            foreach (var point in m_gridControlPoints)
-                vertices.Add(point.valid ? point.position : Vector2.zero);
-
-            return vertices;
+            return m_vertices;
         }
 
         public Vector2 GetValuePointPosition(int index)
@@ -329,9 +389,11 @@ namespace UnityPrototype
             return m_gridValuePoints[index].position;
         }
 
-        public bool IsValuePointActive(int index)
+        public bool IsValuePointActive(int worldIndex)
         {
-            return m_gridValuePoints[index].active;
+            // var worldIndex = LocalToWorldValuePointIndex(cellIndex, localIndex);
+            // var worldIndex = m_localToWorldValuePointIndices[cellIndex][localIndex];
+            return m_gridValuePoints[worldIndex].active;
         }
 
         public int CalculateCellConfiguration(int cellIndex)
