@@ -294,7 +294,7 @@ namespace UnityPrototype
         private void UpdateParticles()
         {
             foreach (var particle in m_particles)
-                particle.CachePosition();
+                particle.PrepareShape();
         }
 
         private void UpdateValuePoints()

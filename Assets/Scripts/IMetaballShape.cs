@@ -27,7 +27,7 @@ namespace UnityPrototype
             m_surface.RemoveParticle(this);
         }
 
-        public void CachePosition()
+        public virtual void PrepareShape()
         {
             m_position = transform.localPosition;
         }
