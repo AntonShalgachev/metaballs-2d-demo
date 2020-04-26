@@ -299,11 +299,15 @@ namespace UnityPrototype
 
         private void UpdateValuePoints()
         {
+            var particles = m_particles.ToArray();
+            var particlesCount = particles.Length;
+
             for (var i = 0; i < m_gridValuePoints.Length; i++)
             {
-                m_gridValuePoints[i].value = 0.0f;
-                foreach (var particle in m_particles)
-                    m_gridValuePoints[i].value += particle.CalculatePotential(m_gridValuePoints[i].position);
+                var value = 0.0f;
+                for (var j = 0; j < particlesCount; j++)
+                    value += particles[j].CalculatePotential(m_gridValuePoints[i].position);
+                m_gridValuePoints[i].value = value;
             }
         }
 
@@ -373,6 +377,7 @@ namespace UnityPrototype
 
         public Vector3[] GetVertices()
         {
+            // TODO: Update only changed control points
             for (var i = 0; i < m_gridControlPoints.Length; i++)
                 m_vertices[m_gridValuePoints.Length + i] = m_gridControlPoints[i].position;
 
