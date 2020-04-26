@@ -135,16 +135,7 @@ namespace UnityPrototype
         [ShowNativeProperty] private Vector2 m_gridCenter => m_gridTransform != null ? (Vector2)m_gridTransform.position : Vector2.one;
 
         private List<IMetaballShape> m_runtimeParticles = new List<IMetaballShape>();
-        private List<IMetaballShape> m_particles
-        {
-            get
-            {
-                if (!Application.isPlaying)
-                    return FindParticles();
-
-                return m_runtimeParticles;
-            }
-        }
+        private List<IMetaballShape> m_particles => m_runtimeParticles;
         private float m_particlesCount => m_particles.Count;
 
         private Vector2Int m_extendedGridResolution;

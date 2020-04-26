@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace UnityPrototype
 {
     public static class MathHelper
@@ -12,6 +14,13 @@ namespace UnityPrototype
             }
 
             return result;
+        }
+
+        public static float DistanceSqr(Vector2 a, Vector2 b)
+        {
+            var dx = b.x - a.x;
+            var dy = b.y - a.y;
+            return dx * dx + dy * dy;
         }
     }
 }

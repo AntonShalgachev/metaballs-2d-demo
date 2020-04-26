@@ -25,7 +25,7 @@ namespace UnityPrototype
 
         public override float CalculatePotential(Vector2 targetPosition)
         {
-            var d2 = (targetPosition - m_position).sqrMagnitude;
+            var d2 = MathHelper.DistanceSqr(targetPosition, m_position);
             var t = 1.0f - Mathf.Min(d2 * m_inverseSquareRadius, 1.0f);
             return MathHelper.IntegerPow(t, m_power) * m_potentialSign;
         }
@@ -44,7 +44,6 @@ namespace UnityPrototype
             base.PrepareShape();
 
             m_inverseSquareRadius = 1.0f / m_radius / m_radius;
-
             m_potentialSign = m_mode == Mode.Positive ? 1.0f : -1.0f;
         }
     }
