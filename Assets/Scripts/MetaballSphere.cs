@@ -36,7 +36,7 @@ namespace UnityPrototype
                 return;
 
             Gizmos.color = m_color;
-            Gizmos.DrawSphere(transform.position, m_radius);
+            GizmosHelper.DrawCircle(transform.position, m_radius);
         }
 
         public override void PrepareShape()
