@@ -349,10 +349,12 @@ namespace UnityPrototype
                 {
                     for (var dCol = -rangeCol - 1; dCol <= rangeCol; dCol++)
                     {
-                        m_filledCells.Add(cellIndex);
-
-                        for (var i = 0; i < 4; i++)
-                            m_dirtyControlPoints.Add(LocalToWorldControlPointIndex(cellIndex, i));
+                        if (cellIndex >= 0 && cellIndex < m_gridCells.Length)
+                        {
+                            m_filledCells.Add(cellIndex);
+                            for (var i = 0; i < 4; i++)
+                                m_dirtyControlPoints.Add(LocalToWorldControlPointIndex(cellIndex, i));
+                        }
 
                         cellIndex++;
                     }
