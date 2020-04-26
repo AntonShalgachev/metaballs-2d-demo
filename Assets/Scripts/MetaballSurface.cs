@@ -421,6 +421,15 @@ namespace UnityPrototype
 
             if (m_drawPointGizmos && m_gridValuePoints != null)
             {
+                foreach (var point in m_gridControlPoints)
+                {
+                    if (!point.valid)
+                        continue;
+
+                    Gizmos.color = Color.green;
+                    Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
+                }
+
                 foreach (var point in m_gridValuePoints)
                 {
                     if (m_useIsoThresholdForColor)
@@ -428,15 +437,6 @@ namespace UnityPrototype
                     else
                         Gizmos.color = Color.Lerp(Color.black, Color.white, point.value);
 
-                    Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
-                }
-
-                foreach (var point in m_gridControlPoints)
-                {
-                    if (!point.valid)
-                        continue;
-
-                    Gizmos.color = Color.green;
                     Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
                 }
             }
