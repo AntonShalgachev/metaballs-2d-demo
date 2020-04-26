@@ -9,6 +9,9 @@ namespace UnityPrototype
         public abstract float CalculatePotential(Vector2 position);
 
         protected Vector2 m_position;
+        public Vector2 position => m_position;
+
+        public abstract float radius { get; }
 
         private MetaballSurface m_surface = null;
 

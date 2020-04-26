@@ -24,35 +24,48 @@ namespace UnityPrototype
 
         public struct GridValuePoint
         {
-            private MetaballSurface m_surface;
+            private readonly MetaballSurface m_surface;
 
-            public Vector2 position;
+            public readonly Vector2 position;
+
+            private int m_dataFrame;
+            private bool m_dataValid => m_dataFrame == m_surface.m_frame;
+
+            public bool debugDataValid => m_dataValid;
 
             private float m_value;
-            public float value
-            {
-                get => m_value;
-                set
-                {
-                    m_value = value;
-                    m_active = m_value >= m_surface.m_isoThreshold;
-                }
-            }
+            public float value => m_dataValid ? m_value : 0.0f;
 
             private bool m_active;
-            public bool active => m_active;
+            public bool active => m_dataValid ? m_active : false;
 
             public GridValuePoint(MetaballSurface surface, Vector2 position)
             {
                 m_surface = surface;
                 this.position = position;
+                m_dataFrame = surface.m_frame;
                 m_value = 0.0f;
                 m_active = false;
             }
 
+            public void AddValue(float valueDelta)
+            {
+                if (valueDelta == 0.0f)
+                    return;
+
+                if (!m_dataValid)
+                {
+                    m_value = 0.0f;
+                    m_dataFrame = m_surface.m_frame;
+                }
+
+                m_value += valueDelta;
+                m_active = m_value >= m_surface.m_isoThreshold; // TODO calculate once per frame per point
+            }
+
             override public string ToString()
             {
-                return $"GridValuePoint {{ Value={value} }}";
+                return $"GridValuePoint {{ Value={m_value} }}";
             }
         }
 
@@ -140,12 +153,18 @@ namespace UnityPrototype
 
         private Vector2Int m_extendedGridResolution;
         public int cellsCount { get; private set; }
+        private Vector2 m_inverseGridRange;
+        private Vector2 m_inverseGridResolution;
+        private Vector2 m_gridStep;
+        private Vector2 m_gridBottomLeftPosition;
 
         private GridValuePoint[] m_gridValuePoints = null;
         private GridControlPoint[] m_gridControlPoints = null;
         private GridCell[] m_gridCells = null;
 
         private Vector3[] m_vertices;
+
+        private int m_frame = 0;
 
         private static readonly Vector2Int[] sm_worldValuePointIndexOffsets = new Vector2Int[] {
                 Vector2Int.zero,
@@ -216,11 +235,6 @@ namespace UnityPrototype
             return new GridControlPoint(this, startIndex, endIndex);
         }
 
-        private GridCell GetGridCell(Vector2Int location)
-        {
-            return m_gridCells[CalculateGridLinearIndex(location.x, location.y, m_gridResolution)];
-        }
-
         private int[][] m_localToWorldValuePointIndices;
         private int[][] m_localToWorldControlPointIndices;
 
@@ -228,6 +242,10 @@ namespace UnityPrototype
         {
             m_extendedGridResolution = m_gridResolution + Vector2Int.one;
             cellsCount = m_gridResolution.x * m_gridResolution.y;
+            m_inverseGridRange = new Vector2(1.0f / m_gridRange.x, 1.0f / m_gridRange.y);
+            m_inverseGridResolution = new Vector2(1.0f / m_gridResolution.x, 1.0f / m_gridResolution.y);
+            m_gridStep = Vector2.Scale(m_gridRange, m_inverseGridResolution);
+            m_gridBottomLeftPosition = 0.5f * m_gridRange - m_gridCenter;
 
             // TODO refactor this fucking index mess
 
@@ -277,29 +295,51 @@ namespace UnityPrototype
 
         public void UpdateField()
         {
-            UpdateParticles();
+            m_frame++;
+
             UpdateValuePoints();
             UpdateControlPoints();
         }
 
-        private void UpdateParticles()
-        {
-            foreach (var particle in m_particles)
-                particle.PrepareShape();
-        }
-
         private void UpdateValuePoints()
         {
-            var particles = m_particles.ToArray();
-            var particlesCount = particles.Length;
-
-            for (var i = 0; i < m_gridValuePoints.Length; i++)
+            foreach (var particle in m_particles)
             {
-                var value = 0.0f;
-                for (var j = 0; j < particlesCount; j++)
-                    value += particles[j].CalculatePotential(m_gridValuePoints[i].position);
-                m_gridValuePoints[i].value = value;
+                particle.PrepareShape();
+
+                var particlePos = particle.position;
+                var relativePos = Vector2.Scale(m_gridBottomLeftPosition + particlePos, m_inverseGridRange);
+                var location = Vector2.Scale(relativePos, m_gridResolution);
+
+                var centerCol = Mathf.RoundToInt(location.x);
+                var centerRow = Mathf.RoundToInt(location.y);
+
+                var rangeCol = (int)(particle.radius / m_gridStep.x);
+                var rangeRow = (int)(particle.radius / m_gridStep.y);
+
+                // col: [centerCol - rangeCol; centerCol + rangeCol]
+                // row: [centerRow - rangeRow; centerRow + rangeRow]
+
+                var pointIndex = CalculateGridLinearIndex(centerCol - rangeCol, centerRow - rangeRow, m_extendedGridResolution);
+                for (var dRow = -rangeRow; dRow <= rangeRow; dRow++)
+                {
+                    for (var dCol = -rangeCol; dCol <= rangeCol; dCol++)
+                    {
+                        UpdateValuePointValue(pointIndex, particle);
+                        pointIndex++;
+                    }
+                    pointIndex += m_extendedGridResolution.x - rangeCol - rangeCol - 1;
+                }
             }
+        }
+
+        private void UpdateValuePointValue(int pointIndex, IMetaballShape particle)
+        {
+            if (pointIndex < 0 || pointIndex >= m_gridValuePoints.Length)
+                return;
+
+            var value = particle.CalculatePotential(m_gridValuePoints[pointIndex].position);
+            m_gridValuePoints[pointIndex].AddValue(value);
         }
 
         private void UpdateControlPoints()
@@ -425,6 +465,9 @@ namespace UnityPrototype
                         Gizmos.color = point.active ? Color.white : Color.black;
                     else
                         Gizmos.color = Color.Lerp(Color.black, Color.white, point.value);
+
+                    if (!point.debugDataValid)
+                        Gizmos.color = Color.magenta;
 
                     Gizmos.DrawSphere(transform.TransformPoint(point.position), 0.02f);
                 }
