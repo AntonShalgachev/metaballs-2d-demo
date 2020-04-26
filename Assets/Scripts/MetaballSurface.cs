@@ -172,6 +172,10 @@ namespace UnityPrototype
 
         private Vector3[] m_vertices;
 
+        private HashSet<int> m_filledCells = new HashSet<int>();
+        private HashSet<int> m_dirtyControlPoints = new HashSet<int>();
+        public ICollection<int> filledCells => m_filledCells;
+
         private int m_frame = 0;
 
         private static readonly Vector2Int[] sm_worldValuePointIndexOffsets = new Vector2Int[] {
@@ -310,6 +314,8 @@ namespace UnityPrototype
 
         private void UpdateValuePoints()
         {
+            m_filledCells.Clear();
+
             foreach (var particle in m_particles)
             {
                 particle.PrepareShape();
@@ -336,6 +342,21 @@ namespace UnityPrototype
                         pointIndex++;
                     }
                     pointIndex += m_extendedGridResolution.x - rangeCol - rangeCol - 1;
+                }
+
+                var cellIndex = CalculateGridLinearIndex(centerCol - rangeCol - 1, centerRow - rangeRow - 1, m_gridResolution);
+                for (var dRow = -rangeRow - 1; dRow <= rangeRow; dRow++)
+                {
+                    for (var dCol = -rangeCol - 1; dCol <= rangeCol; dCol++)
+                    {
+                        m_filledCells.Add(cellIndex);
+
+                        for (var i = 0; i < 4; i++)
+                            m_dirtyControlPoints.Add(LocalToWorldControlPointIndex(cellIndex, i));
+
+                        cellIndex++;
+                    }
+                    cellIndex += m_gridResolution.x - rangeCol - rangeCol - 2;
                 }
             }
         }
@@ -395,8 +416,7 @@ namespace UnityPrototype
 
         public Vector3[] GetVertices()
         {
-            // TODO: Update only changed control points
-            for (var i = 0; i < m_gridControlPoints.Length; i++)
+            foreach (var i in m_dirtyControlPoints)
                 m_vertices[m_gridValuePoints.Length + i] = m_gridControlPoints[i].position;
 
             return m_vertices;

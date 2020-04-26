@@ -86,14 +86,14 @@ namespace UnityPrototype
         {
             m_indices.Clear();
 
-            for (var i = 0; i < m_surface.cellsCount; i++)
+            foreach (var cellIndex in m_surface.filledCells)
             {
-                var configuration = m_surface.CalculateCellConfiguration(i);
+                var configuration = m_surface.CalculateCellConfiguration(cellIndex);
 
                 var localTriangleIndices = sm_cellTriangleIndices[configuration];
 
                 foreach (var localIndex in localTriangleIndices)
-                    m_indices.Add(m_surface.LocalToWorldPointIndex(i, localIndex));
+                    m_indices.Add(m_surface.LocalToWorldPointIndex(cellIndex, localIndex));
             }
         }
     }
