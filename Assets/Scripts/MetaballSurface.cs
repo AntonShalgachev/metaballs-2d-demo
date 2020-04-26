@@ -307,14 +307,6 @@ namespace UnityPrototype
             }
         }
 
-        private float InverseLerpUnclamped(float a, float b, float v)
-        {
-            var range = b - a;
-            if (range == 0.0f)
-                return 0.5f;
-            return (v - a) / range;
-        }
-
         private void UpdateControlPoints()
         {
             if (!m_interpolateEdgePoints)
@@ -328,7 +320,10 @@ namespace UnityPrototype
                 var startValuePointIndex = m_gridControlPoints[i].startValuePointIndex;
                 var endValuePointIndex = m_gridControlPoints[i].endValuePointIndex;
 
-                m_gridControlPoints[i].relativePosition = InverseLerpUnclamped(m_gridValuePoints[startValuePointIndex].value, m_gridValuePoints[endValuePointIndex].value, m_isoThreshold);
+                var startValuePointValue = m_gridValuePoints[startValuePointIndex].value;
+                var endValuePointValue = m_gridValuePoints[endValuePointIndex].value;
+
+                m_gridControlPoints[i].relativePosition = Mathf.InverseLerp(startValuePointValue, endValuePointValue, m_isoThreshold);
             }
         }
 
@@ -391,8 +386,6 @@ namespace UnityPrototype
 
         public bool IsValuePointActive(int worldIndex)
         {
-            // var worldIndex = LocalToWorldValuePointIndex(cellIndex, localIndex);
-            // var worldIndex = m_localToWorldValuePointIndices[cellIndex][localIndex];
             return m_gridValuePoints[worldIndex].active;
         }
 
