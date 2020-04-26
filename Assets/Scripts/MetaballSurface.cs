@@ -73,21 +73,29 @@ namespace UnityPrototype
         {
             private MetaballSurface m_surface;
 
-            public readonly int startValuePointIndex;
-            public readonly int endValuePointIndex;
+            private readonly int m_startValuePointIndex;
+            private readonly int m_endValuePointIndex;
             public readonly bool valid;
-            public float relativePosition;
             public Vector2 position => CalculatePosition();
 
             public GridControlPoint(MetaballSurface surface, int startValuePointIndex, int endValuePointIndex)
             {
                 m_surface = surface;
 
-                this.startValuePointIndex = startValuePointIndex;
-                this.endValuePointIndex = endValuePointIndex;
+                this.m_startValuePointIndex = startValuePointIndex;
+                this.m_endValuePointIndex = endValuePointIndex;
                 this.valid = startValuePointIndex >= 0 && endValuePointIndex >= 0;
+            }
 
-                relativePosition = 0.5f;
+            private float CalculateRelativePosition()
+            {
+                if (!m_surface.m_interpolateEdgePoints)
+                    return 0.5f;
+
+                var startValue = m_surface.GetValuePointValue(m_startValuePointIndex);
+                var endValue = m_surface.GetValuePointValue(m_endValuePointIndex);
+
+                return Mathf.InverseLerp(startValue, endValue, m_surface.m_isoThreshold);
             }
 
             private Vector2 CalculatePosition()
@@ -95,10 +103,10 @@ namespace UnityPrototype
                 if (!valid)
                     return Vector2.zero;
 
-                var startPosition = m_surface.GetValuePointPosition(startValuePointIndex);
-                var endPosition = m_surface.GetValuePointPosition(endValuePointIndex);
+                var startPosition = m_surface.GetValuePointPosition(m_startValuePointIndex);
+                var endPosition = m_surface.GetValuePointPosition(m_endValuePointIndex);
 
-                return Vector2.LerpUnclamped(startPosition, endPosition, relativePosition);
+                return Vector2.LerpUnclamped(startPosition, endPosition, CalculateRelativePosition());
             }
         }
 
@@ -298,7 +306,6 @@ namespace UnityPrototype
             m_frame++;
 
             UpdateValuePoints();
-            UpdateControlPoints();
         }
 
         private void UpdateValuePoints()
@@ -340,26 +347,6 @@ namespace UnityPrototype
 
             var value = particle.CalculatePotential(m_gridValuePoints[pointIndex].position);
             m_gridValuePoints[pointIndex].AddValue(value);
-        }
-
-        private void UpdateControlPoints()
-        {
-            if (!m_interpolateEdgePoints)
-                return;
-
-            for (var i = 0; i < m_gridControlPoints.Length; i++)
-            {
-                if (!m_gridControlPoints[i].valid)
-                    continue;
-
-                var startValuePointIndex = m_gridControlPoints[i].startValuePointIndex;
-                var endValuePointIndex = m_gridControlPoints[i].endValuePointIndex;
-
-                var startValuePointValue = m_gridValuePoints[startValuePointIndex].value;
-                var endValuePointValue = m_gridValuePoints[endValuePointIndex].value;
-
-                m_gridControlPoints[i].relativePosition = Mathf.InverseLerp(startValuePointValue, endValuePointValue, m_isoThreshold);
-            }
         }
 
         public int LocalToWorldValuePointIndex(int cellIndex, int localValuePointIndex)
@@ -418,6 +405,11 @@ namespace UnityPrototype
         public Vector2 GetValuePointPosition(int index)
         {
             return m_gridValuePoints[index].position;
+        }
+
+        public float GetValuePointValue(int index)
+        {
+            return m_gridValuePoints[index].value;
         }
 
         public bool IsValuePointActive(int worldIndex)
